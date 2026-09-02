@@ -23,6 +23,7 @@ class PhysicsEngine:
         actual_thrust_accel: filtered thrust acceleration actually available at the current instant
         motor_time_constant: first-order motor response time constant in seconds
         thrust_accel: alias for the actual thrust acceleration used by the physics step
+        drag_coeff_vertical: linear vertical aerodynamic drag coefficient in 1/s
     """
 
     position: Tuple[float, float, float] = (0.0, 0.0, 0.0)
@@ -32,6 +33,7 @@ class PhysicsEngine:
     actual_thrust_accel: float = GRAVITY
     motor_time_constant: float = 0.1
     thrust_accel: float = GRAVITY
+    drag_coeff_vertical: float = 0.0
 
     def __post_init__(self) -> None:
         """Keep the public `thrust_accel` field aligned with the actual response state."""
@@ -39,6 +41,9 @@ class PhysicsEngine:
         self.actual_thrust_accel = float(self.actual_thrust_accel)
         self.motor_time_constant = max(1e-6, float(self.motor_time_constant))
         self.thrust_accel = self.actual_thrust_accel
+        if self.drag_coeff_vertical < 0.0:
+            raise ValueError(f"drag_coeff_vertical must be non-negative, got {self.drag_coeff_vertical}")
+        self.drag_coeff_vertical = float(self.drag_coeff_vertical)
 
     def _response_factor(self, dt: float) -> float:
         """Compute a stable first-order response factor for a given timestep."""
@@ -90,8 +95,8 @@ class PhysicsEngine:
         self.actual_thrust_accel += (self.target_thrust_accel - self.actual_thrust_accel) * response_factor
         self.thrust_accel = self.actual_thrust_accel
 
-        # compute net vertical acceleration (thrust minus gravity plus external)
-        az = self.actual_thrust_accel - GRAVITY + ex_az
+        # compute net vertical acceleration (thrust minus gravity minus vertical drag plus external)
+        az = self.actual_thrust_accel - GRAVITY - self.drag_coeff_vertical * vz + ex_az
 
         # integrate velocity and position (semi-implicit Euler)
         vx = vx + ex_ax * dt

@@ -136,5 +136,70 @@ class FlightControllerCommandTests(unittest.TestCase):
         self.assertTrue(descended, "Drone did not begin descent within expected time")
 
 
+class VerticalDragTests(unittest.TestCase):
+    def test_zero_coefficient_preserves_existing_behavior(self) -> None:
+        engine_default = PhysicsEngine(position=(0.0, 0.0, 5.0), velocity=(0.0, 0.0, 2.0))
+        engine_explicit_zero = PhysicsEngine(position=(0.0, 0.0, 5.0), velocity=(0.0, 0.0, 2.0), drag_coeff_vertical=0.0)
+        engine_default.step(0.1)
+        engine_explicit_zero.step(0.1)
+        self.assertEqual(engine_default.position, engine_explicit_zero.position)
+        self.assertEqual(engine_default.velocity, engine_explicit_zero.velocity)
+        self.assertEqual(engine_default.acceleration, engine_explicit_zero.acceleration)
+
+    def test_upward_velocity_opposed_by_drag(self) -> None:
+        engine_no_drag = PhysicsEngine(position=(0.0, 0.0, 10.0), velocity=(0.0, 0.0, 4.0), drag_coeff_vertical=0.0)
+        engine_with_drag = PhysicsEngine(position=(0.0, 0.0, 10.0), velocity=(0.0, 0.0, 4.0), drag_coeff_vertical=0.5)
+
+        engine_no_drag.step(0.1)
+        engine_with_drag.step(0.1)
+
+        # az without drag: 0.0; az with drag: -0.5 * 4.0 = -2.0
+        self.assertAlmostEqual(engine_no_drag.acceleration[2], 0.0)
+        self.assertAlmostEqual(engine_with_drag.acceleration[2], -2.0)
+        self.assertLess(engine_with_drag.velocity[2], engine_no_drag.velocity[2])
+        self.assertLess(engine_with_drag.position[2], engine_no_drag.position[2])
+
+    def test_downward_velocity_opposed_by_drag(self) -> None:
+        engine_no_drag = PhysicsEngine(position=(0.0, 0.0, 10.0), velocity=(0.0, 0.0, -4.0), drag_coeff_vertical=0.0)
+        engine_with_drag = PhysicsEngine(position=(0.0, 0.0, 10.0), velocity=(0.0, 0.0, -4.0), drag_coeff_vertical=0.5)
+
+        engine_no_drag.step(0.1)
+        engine_with_drag.step(0.1)
+
+        # az without drag: 0.0; az with drag: -0.5 * (-4.0) = +2.0
+        self.assertAlmostEqual(engine_no_drag.acceleration[2], 0.0)
+        self.assertAlmostEqual(engine_with_drag.acceleration[2], 2.0)
+        self.assertGreater(engine_with_drag.velocity[2], engine_no_drag.velocity[2])
+        self.assertGreater(engine_with_drag.position[2], engine_no_drag.position[2])
+
+    def test_drag_is_zero_when_vz_is_zero(self) -> None:
+        engine = PhysicsEngine(position=(0.0, 0.0, 10.0), velocity=(0.0, 0.0, 0.0), drag_coeff_vertical=1.0)
+        engine.step(0.1)
+        self.assertAlmostEqual(engine.acceleration[2], 0.0)
+        self.assertAlmostEqual(engine.velocity[2], 0.0)
+        self.assertAlmostEqual(engine.position[2], 10.0)
+
+    def test_negative_drag_coeff_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            PhysicsEngine(drag_coeff_vertical=-0.5)
+
+    def test_drag_sign_explicit_verification(self) -> None:
+        coeff = 0.75
+        vz_up = 2.0
+        vz_down = -2.0
+
+        eng_up = PhysicsEngine(position=(0.0, 0.0, 10.0), velocity=(0.0, 0.0, vz_up), drag_coeff_vertical=coeff)
+        eng_up.step(0.01)
+        # vz > 0 -> drag acceleration is negative (downward)
+        self.assertLess(eng_up.acceleration[2], 0.0)
+        self.assertAlmostEqual(eng_up.acceleration[2], -coeff * vz_up)
+
+        eng_down = PhysicsEngine(position=(0.0, 0.0, 10.0), velocity=(0.0, 0.0, vz_down), drag_coeff_vertical=coeff)
+        eng_down.step(0.01)
+        # vz < 0 -> drag acceleration is positive (upward damping)
+        self.assertGreater(eng_down.acceleration[2], 0.0)
+        self.assertAlmostEqual(eng_down.acceleration[2], -coeff * vz_down)
+
+
 if __name__ == "__main__":
     unittest.main()
