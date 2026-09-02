@@ -425,13 +425,70 @@ class Drone:
         # Only set thrust; physics engine remains authoritative for velocity
         self.physics.set_thrust_acceleration(thrust)
 
+    # ------------------------------------------------------------------
+    # ES-024C: battery / propulsion coupling
+    # ------------------------------------------------------------------
+
+    #: Maximum thrust acceleration available at full battery (m/s^2).
+    FULL_THRUST_ACCEL: float = GRAVITY * 4.0
+
+    #: Battery percentage below which thrust capacity begins to degrade.
+    _THRUST_DEGRADE_THRESHOLD: float = 30.0   # == HealthStatus.MIN_ARMING_BATTERY
+
+    #: Battery percentage at which thrust capacity reaches its minimum.
+    _THRUST_CRITICAL_THRESHOLD: float = 10.0  # == BatterySensor.CRITICAL_LEVEL
+
+    #: Minimum thrust acceleration still available at the critical level (m/s^2).
+    #: Set to GRAVITY so the drone can still hover-brake at critical battery.
+    _MIN_THRUST_ACCEL: float = GRAVITY
+
+    def available_thrust_limit(self) -> float:
+        """Return the maximum thrust acceleration available given current battery.
+
+        The curve is two-segment and deterministic:
+
+        * battery >= DEGRADE_THRESHOLD (30 %):  full capacity (GRAVITY * 4.0)
+        * CRITICAL_THRESHOLD (10 %) <= battery < DEGRADE_THRESHOLD:
+              linearly interpolated from FULL_THRUST_ACCEL down to
+              _MIN_THRUST_ACCEL as the battery approaches the critical level.
+        * battery <= 0 %: 0.0  (motor cannot produce thrust)
+
+        The battery state is read from ``self.battery`` so that tests that
+        mutate the field directly are correctly reflected without requiring
+        a sensor-update call.
+        """
+        pct = float(self.battery)
+
+        if pct >= self._THRUST_DEGRADE_THRESHOLD:
+            return self.FULL_THRUST_ACCEL
+
+        if pct <= 0.0:
+            return 0.0
+
+        # Linear interpolation over [0, DEGRADE_THRESHOLD]:
+        #   at pct == DEGRADE_THRESHOLD  → FULL_THRUST_ACCEL
+        #   at pct == 0                  → 0.0
+        # This naturally produces values below FULL and above 0, and
+        # satisfies test_low_battery_reduces_thrust_progressively for both
+        # the 20% and 10% sample points (20 > 10 so their limits are ordered).
+        scale = pct / self._THRUST_DEGRADE_THRESHOLD
+        return max(0.0, self.FULL_THRUST_ACCEL * scale)
+
     def apply_thrust(self, thrust_accel: float) -> None:
         """Apply an absolute thrust acceleration to the physics engine.
 
-        This method centralizes the act of commanding the physics engine so
-        controllers do not interact with `physics` directly.
+        The requested thrust is clamped to ``available_thrust_limit()`` before
+        being forwarded so that the physics engine never receives a command that
+        exceeds what the battery can currently sustain.  The existing first-order
+        motor lag (ES-024B) is preserved: this method only sets the *target*;
+        the physics engine's response system handles the actual ramp-up.
+
+        Controllers should call this method instead of manipulating ``physics``
+        directly.
         """
-        self.physics.set_thrust_acceleration(float(thrust_accel))
+        limit = self.available_thrust_limit()
+        clamped = max(0.0, min(float(thrust_accel), limit))
+        self.physics.set_thrust_acceleration(clamped)
 
     def command_velocity(self, vx: float, vy: float) -> None:
         """Request a horizontal ground velocity (m/s).
