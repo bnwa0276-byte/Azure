@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test and runtime artifacts
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.log
+
+# Generated outputs
+analytics_output/
+output/
+results/
+reports/
+*.csv
+*.json
+
+# OS files
+.DS_Store
+Thumbs.db
