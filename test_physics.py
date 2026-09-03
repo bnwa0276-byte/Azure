@@ -313,5 +313,141 @@ class GroundContactTests(unittest.TestCase):
         self.assertAlmostEqual(engine.position[2], expected_z)
 
 
+class HorizontalDragTests(unittest.TestCase):
+    def test_default_coefficient_preserves_existing_behavior(self) -> None:
+        engine_default = PhysicsEngine(position=(1.0, 2.0, 5.0), velocity=(3.0, -4.0, 2.0))
+        engine_explicit_zero = PhysicsEngine(
+            position=(1.0, 2.0, 5.0),
+            velocity=(3.0, -4.0, 2.0),
+            drag_coeff_horizontal=0.0,
+        )
+        self.assertEqual(engine_default.drag_coeff_horizontal, 0.0)
+        engine_default.step(0.1)
+        engine_explicit_zero.step(0.1)
+        self.assertEqual(engine_default.position, engine_explicit_zero.position)
+        self.assertEqual(engine_default.velocity, engine_explicit_zero.velocity)
+        self.assertEqual(engine_default.acceleration, engine_explicit_zero.acceleration)
+
+    def test_positive_vx_receives_opposing_drag(self) -> None:
+        engine_no_drag = PhysicsEngine(position=(0.0, 0.0, 10.0), velocity=(4.0, 0.0, 0.0), drag_coeff_horizontal=0.0)
+        engine_with_drag = PhysicsEngine(position=(0.0, 0.0, 10.0), velocity=(4.0, 0.0, 0.0), drag_coeff_horizontal=0.5)
+
+        engine_no_drag.step(0.1)
+        engine_with_drag.step(0.1)
+
+        # ax without drag: 0.0; ax with drag: -0.5 * 4.0 = -2.0
+        self.assertAlmostEqual(engine_no_drag.acceleration[0], 0.0)
+        self.assertAlmostEqual(engine_with_drag.acceleration[0], -2.0)
+        self.assertLess(engine_with_drag.acceleration[0], 0.0)
+        self.assertLess(engine_with_drag.velocity[0], engine_no_drag.velocity[0])
+        self.assertLess(engine_with_drag.position[0], engine_no_drag.position[0])
+
+    def test_negative_vx_receives_opposing_drag(self) -> None:
+        engine_no_drag = PhysicsEngine(position=(0.0, 0.0, 10.0), velocity=(-4.0, 0.0, 0.0), drag_coeff_horizontal=0.0)
+        engine_with_drag = PhysicsEngine(position=(0.0, 0.0, 10.0), velocity=(-4.0, 0.0, 0.0), drag_coeff_horizontal=0.5)
+
+        engine_no_drag.step(0.1)
+        engine_with_drag.step(0.1)
+
+        # ax without drag: 0.0; ax with drag: -0.5 * (-4.0) = +2.0
+        self.assertAlmostEqual(engine_no_drag.acceleration[0], 0.0)
+        self.assertAlmostEqual(engine_with_drag.acceleration[0], 2.0)
+        self.assertGreater(engine_with_drag.acceleration[0], 0.0)
+        self.assertGreater(engine_with_drag.velocity[0], engine_no_drag.velocity[0])
+        self.assertGreater(engine_with_drag.position[0], engine_no_drag.position[0])
+
+    def test_positive_vy_receives_opposing_drag(self) -> None:
+        engine_no_drag = PhysicsEngine(position=(0.0, 0.0, 10.0), velocity=(0.0, 4.0, 0.0), drag_coeff_horizontal=0.0)
+        engine_with_drag = PhysicsEngine(position=(0.0, 0.0, 10.0), velocity=(0.0, 4.0, 0.0), drag_coeff_horizontal=0.5)
+
+        engine_no_drag.step(0.1)
+        engine_with_drag.step(0.1)
+
+        # ay without drag: 0.0; ay with drag: -0.5 * 4.0 = -2.0
+        self.assertAlmostEqual(engine_no_drag.acceleration[1], 0.0)
+        self.assertAlmostEqual(engine_with_drag.acceleration[1], -2.0)
+        self.assertLess(engine_with_drag.acceleration[1], 0.0)
+        self.assertLess(engine_with_drag.velocity[1], engine_no_drag.velocity[1])
+        self.assertLess(engine_with_drag.position[1], engine_no_drag.position[1])
+
+    def test_negative_vy_receives_opposing_drag(self) -> None:
+        engine_no_drag = PhysicsEngine(position=(0.0, 0.0, 10.0), velocity=(0.0, -4.0, 0.0), drag_coeff_horizontal=0.0)
+        engine_with_drag = PhysicsEngine(position=(0.0, 0.0, 10.0), velocity=(0.0, -4.0, 0.0), drag_coeff_horizontal=0.5)
+
+        engine_no_drag.step(0.1)
+        engine_with_drag.step(0.1)
+
+        # ay without drag: 0.0; ay with drag: -0.5 * (-4.0) = +2.0
+        self.assertAlmostEqual(engine_no_drag.acceleration[1], 0.0)
+        self.assertAlmostEqual(engine_with_drag.acceleration[1], 2.0)
+        self.assertGreater(engine_with_drag.acceleration[1], 0.0)
+        self.assertGreater(engine_with_drag.velocity[1], engine_no_drag.velocity[1])
+        self.assertGreater(engine_with_drag.position[1], engine_no_drag.position[1])
+
+    def test_zero_horizontal_velocity_produces_zero_drag(self) -> None:
+        engine = PhysicsEngine(position=(5.0, 5.0, 10.0), velocity=(0.0, 0.0, 0.0), drag_coeff_horizontal=1.5)
+        engine.step(0.1)
+        self.assertAlmostEqual(engine.acceleration[0], 0.0)
+        self.assertAlmostEqual(engine.acceleration[1], 0.0)
+        self.assertAlmostEqual(engine.velocity[0], 0.0)
+        self.assertAlmostEqual(engine.velocity[1], 0.0)
+        self.assertAlmostEqual(engine.position[0], 5.0)
+        self.assertAlmostEqual(engine.position[1], 5.0)
+
+    def test_negative_drag_coefficient_raises_value_error(self) -> None:
+        with self.assertRaises(ValueError):
+            PhysicsEngine(drag_coeff_horizontal=-0.5)
+        with self.assertRaises(ValueError):
+            PhysicsEngine(drag_coeff_horizontal=-1e-5)
+
+    def test_horizontal_and_vertical_drag_operate_independently(self) -> None:
+        drag_h = 0.4
+        drag_v = 0.8
+        vx0, vy0, vz0 = 3.0, -5.0, 2.0
+        dt = 0.1
+
+        engine = PhysicsEngine(
+            position=(10.0, 20.0, 30.0),
+            velocity=(vx0, vy0, vz0),
+            drag_coeff_horizontal=drag_h,
+            drag_coeff_vertical=drag_v,
+        )
+
+        expected_ax = -drag_h * vx0
+        expected_ay = -drag_h * vy0
+        expected_az = -drag_v * vz0
+        expected_vx = vx0 + expected_ax * dt
+        expected_vy = vy0 + expected_ay * dt
+        expected_vz = vz0 + expected_az * dt
+        expected_x = 10.0 + expected_vx * dt
+        expected_y = 20.0 + expected_vy * dt
+        expected_z = 30.0 + expected_vz * dt
+
+        engine.step(dt)
+
+        self.assertAlmostEqual(engine.acceleration[0], expected_ax)
+        self.assertAlmostEqual(engine.acceleration[1], expected_ay)
+        self.assertAlmostEqual(engine.acceleration[2], expected_az)
+        self.assertAlmostEqual(engine.velocity[0], expected_vx)
+        self.assertAlmostEqual(engine.velocity[1], expected_vy)
+        self.assertAlmostEqual(engine.velocity[2], expected_vz)
+        self.assertAlmostEqual(engine.position[0], expected_x)
+        self.assertAlmostEqual(engine.position[1], expected_y)
+        self.assertAlmostEqual(engine.position[2], expected_z)
+
+        engine_h_only = PhysicsEngine(
+            position=(10.0, 20.0, 30.0),
+            velocity=(vx0, vy0, vz0),
+            drag_coeff_horizontal=drag_h,
+            drag_coeff_vertical=0.0,
+        )
+        engine_h_only.step(dt)
+        self.assertAlmostEqual(engine.acceleration[0], engine_h_only.acceleration[0])
+        self.assertAlmostEqual(engine.acceleration[1], engine_h_only.acceleration[1])
+        self.assertAlmostEqual(engine.velocity[0], engine_h_only.velocity[0])
+        self.assertAlmostEqual(engine.velocity[1], engine_h_only.velocity[1])
+        self.assertNotEqual(engine.acceleration[2], engine_h_only.acceleration[2])
+
+
 if __name__ == "__main__":
     unittest.main()

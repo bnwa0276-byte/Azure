@@ -13,7 +13,7 @@ GRAVITY = 9.81  # m/s^2
 class PhysicsEngine:
     """Simulates simplified 3-DoF drone physics (x, y, z).
 
-    Only vertical dynamics (z) are meaningful for this simplified engine.
+    Simulates vertical and horizontal dynamics with linear aerodynamic drag.
 
     Attributes:
         position: (x, y, z) in meters
@@ -24,6 +24,7 @@ class PhysicsEngine:
         motor_time_constant: first-order motor response time constant in seconds
         thrust_accel: alias for the actual thrust acceleration used by the physics step
         drag_coeff_vertical: linear vertical aerodynamic drag coefficient in 1/s
+        drag_coeff_horizontal: linear horizontal aerodynamic drag coefficient in 1/s
     """
 
     position: Tuple[float, float, float] = (0.0, 0.0, 0.0)
@@ -34,6 +35,7 @@ class PhysicsEngine:
     motor_time_constant: float = 0.1
     thrust_accel: float = GRAVITY
     drag_coeff_vertical: float = 0.0
+    drag_coeff_horizontal: float = 0.0
 
     def __post_init__(self) -> None:
         """Keep the public `thrust_accel` field aligned with the actual response state."""
@@ -44,6 +46,9 @@ class PhysicsEngine:
         if self.drag_coeff_vertical < 0.0:
             raise ValueError(f"drag_coeff_vertical must be non-negative, got {self.drag_coeff_vertical}")
         self.drag_coeff_vertical = float(self.drag_coeff_vertical)
+        if self.drag_coeff_horizontal < 0.0:
+            raise ValueError(f"drag_coeff_horizontal must be non-negative, got {self.drag_coeff_horizontal}")
+        self.drag_coeff_horizontal = float(self.drag_coeff_horizontal)
 
     def _response_factor(self, dt: float) -> float:
         """Compute a stable first-order response factor for a given timestep."""
@@ -95,12 +100,14 @@ class PhysicsEngine:
         self.actual_thrust_accel += (self.target_thrust_accel - self.actual_thrust_accel) * response_factor
         self.thrust_accel = self.actual_thrust_accel
 
-        # compute net vertical acceleration (thrust minus gravity minus vertical drag plus external)
+        # compute net horizontal and vertical accelerations
+        ax = ex_ax - self.drag_coeff_horizontal * vx
+        ay = ex_ay - self.drag_coeff_horizontal * vy
         az = self.actual_thrust_accel - GRAVITY - self.drag_coeff_vertical * vz + ex_az
 
         # integrate velocity and position (semi-implicit Euler)
-        vx = vx + ex_ax * dt
-        vy = vy + ex_ay * dt
+        vx = vx + ax * dt
+        vy = vy + ay * dt
         vz = vz + az * dt
 
         x = x + vx * dt
@@ -119,6 +126,6 @@ class PhysicsEngine:
                 vz = 0.0
 
         # store back
-        self.acceleration = (ex_ax, ex_ay, az)
+        self.acceleration = (ax, ay, az)
         self.velocity = (vx, vy, vz)
         self.position = (x, y, z)
