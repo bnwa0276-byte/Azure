@@ -94,6 +94,33 @@ class BatteryPropulsionTests(unittest.TestCase):
 
         self.assertAlmostEqual(drone.altitude, 0.0, delta=0.1)
 
+    def test_command_hover_clamped_at_zero_battery(self) -> None:
+        drone = Drone(battery=0.0)
+        drone.command_hover()
+        self.assertEqual(drone.physics.target_thrust_accel, 0.0)
+
+    def test_command_climb_clamped_at_degraded_battery(self) -> None:
+        drone = Drone(battery=15.0)
+        requested_thrust = 15.0 + GRAVITY
+        self.assertGreater(requested_thrust, drone.available_thrust_limit())
+        drone.command_climb(accel=15.0)
+        self.assertAlmostEqual(drone.physics.target_thrust_accel, drone.available_thrust_limit())
+
+    def test_command_descend_clamps_excessive_acceleration_to_zero_thrust(self) -> None:
+        drone = Drone()
+        requested_thrust = GRAVITY - 20.0
+        self.assertLess(requested_thrust, 0.0)
+        drone.command_descend(accel=20.0)
+        self.assertEqual(drone.physics.target_thrust_accel, 0.0)
+
+    def test_flight_controller_commands_respect_battery_limit(self) -> None:
+        drone = Drone(battery=0.0)
+        fc = FlightController(drone)
+        fc.hover()
+        self.assertEqual(drone.physics.target_thrust_accel, 0.0)
+        fc.climb(3.0)
+        self.assertEqual(drone.physics.target_thrust_accel, 0.0)
+
 
 class FlightControllerCommandTests(unittest.TestCase):
     def test_controller_climb_hover_descend(self) -> None:

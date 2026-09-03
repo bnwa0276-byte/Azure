@@ -413,17 +413,17 @@ class Drone:
         manipulating the physics engine directly.
         """
         thrust = accel + GRAVITY
-        self.physics.set_thrust_acceleration(thrust)
+        self.apply_thrust(thrust)
 
     def command_hover(self) -> None:
         """Request hover (thrust equals gravity)."""
-        self.physics.set_thrust_acceleration(GRAVITY)
+        self.apply_thrust(GRAVITY)
 
     def command_descend(self, accel: float = 2.0) -> None:
         """Request a downward acceleration magnitude (m/s^2)."""
         thrust = GRAVITY - accel
         # Only set thrust; physics engine remains authoritative for velocity
-        self.physics.set_thrust_acceleration(thrust)
+        self.apply_thrust(thrust)
 
     # ------------------------------------------------------------------
     # ES-024C: battery / propulsion coupling
