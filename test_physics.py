@@ -201,5 +201,90 @@ class VerticalDragTests(unittest.TestCase):
         self.assertAlmostEqual(eng_down.acceleration[2], -coeff * vz_down)
 
 
+class GroundContactTests(unittest.TestCase):
+    def test_ground_resting_state_reports_zero_acceleration(self) -> None:
+        engine = PhysicsEngine(
+            position=(0.0, 0.0, 0.0),
+            velocity=(0.0, 0.0, 0.0),
+            target_thrust_accel=0.0,
+            actual_thrust_accel=0.0,
+        )
+        engine.set_thrust_acceleration(0.0)
+        engine.step(0.1)
+        self.assertAlmostEqual(engine.position[2], 0.0)
+        self.assertAlmostEqual(engine.velocity[2], 0.0)
+        self.assertAlmostEqual(engine.acceleration[2], 0.0)
+
+    def test_ground_resting_with_partial_thrust(self) -> None:
+        partial_thrust = GRAVITY * 0.5
+        engine = PhysicsEngine(
+            position=(0.0, 0.0, 0.0),
+            velocity=(0.0, 0.0, 0.0),
+            target_thrust_accel=partial_thrust,
+            actual_thrust_accel=partial_thrust,
+        )
+        engine.set_thrust_acceleration(partial_thrust)
+        engine.step(0.1)
+        self.assertAlmostEqual(engine.position[2], 0.0)
+        self.assertAlmostEqual(engine.velocity[2], 0.0)
+        self.assertAlmostEqual(engine.acceleration[2], 0.0)
+
+    def test_ground_liftoff_when_thrust_exceeds_gravity(self) -> None:
+        climb_thrust = GRAVITY + 4.0
+        engine = PhysicsEngine(
+            position=(0.0, 0.0, 0.0),
+            velocity=(0.0, 0.0, 0.0),
+            target_thrust_accel=climb_thrust,
+            actual_thrust_accel=climb_thrust,
+        )
+        engine.set_thrust_acceleration(climb_thrust)
+        engine.step(0.1)
+        self.assertGreater(engine.acceleration[2], 0.0)
+        self.assertGreater(engine.velocity[2], 0.0)
+        self.assertGreater(engine.position[2], 0.0)
+
+    def test_touchdown_resolves_to_static_contact(self) -> None:
+        engine = PhysicsEngine(
+            position=(0.0, 0.0, 0.5),
+            velocity=(0.0, 0.0, -2.0),
+            target_thrust_accel=0.0,
+            actual_thrust_accel=0.0,
+        )
+        # Step until ground contact
+        for _ in range(20):
+            engine.step(0.05)
+            if engine.position[2] <= 0.0:
+                break
+
+        # Assert touchdown resolves to z=0 and vz=0
+        self.assertAlmostEqual(engine.position[2], 0.0)
+        self.assertAlmostEqual(engine.velocity[2], 0.0)
+
+        # Perform another step and assert it remains z=0, vz=0, az=0 with zero thrust
+        engine.step(0.05)
+        self.assertAlmostEqual(engine.position[2], 0.0)
+        self.assertAlmostEqual(engine.velocity[2], 0.0)
+        self.assertAlmostEqual(engine.acceleration[2], 0.0)
+
+    def test_ground_constraint_does_not_affect_free_flight(self) -> None:
+        drag_coeff = 0.5
+        engine = PhysicsEngine(
+            position=(0.0, 0.0, 20.0),
+            velocity=(0.0, 0.0, 3.0),
+            target_thrust_accel=GRAVITY + 2.0,
+            actual_thrust_accel=GRAVITY + 2.0,
+            drag_coeff_vertical=drag_coeff,
+        )
+        dt = 0.1
+        expected_az = (GRAVITY + 2.0) - GRAVITY - drag_coeff * 3.0
+        expected_vz = 3.0 + expected_az * dt
+        expected_z = 20.0 + expected_vz * dt
+
+        engine.step(dt)
+        self.assertAlmostEqual(engine.acceleration[2], expected_az)
+        self.assertAlmostEqual(engine.velocity[2], expected_vz)
+        self.assertAlmostEqual(engine.position[2], expected_z)
+
+
 if __name__ == "__main__":
     unittest.main()

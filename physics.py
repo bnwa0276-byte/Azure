@@ -107,10 +107,16 @@ class PhysicsEngine:
         y = y + vy * dt
         z = z + vz * dt
 
-        # prevent negative altitude
-        if z < 0.0:
+        # Unilateral zero-restitution ground contact boundary condition:
+        # when at or below ground level and the ground supports the vehicle (az <= 0),
+        # normal reaction force balances gravity so net vertical acceleration is zero
+        if z <= 0.0:
             z = 0.0
-            vz = 0.0
+            if az <= 0.0:
+                az = 0.0
+                vz = 0.0
+            elif vz < 0.0:
+                vz = 0.0
 
         # store back
         self.acceleration = (ex_ax, ex_ay, az)
