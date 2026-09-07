@@ -336,5 +336,146 @@ class GazeboArchitectureTests(unittest.TestCase):
                     )
 
 
+class GazeboUDPReceiverTests(unittest.TestCase):
+    """Regression tests for ES-025B Gazebo UDP receiver component."""
+
+    def test_valid_udp_packet(self) -> None:
+        """Requirement ES-025B.1: Valid packet updates receiver state and increments count."""
+        from gazebo import GazeboUDPReceiver
+
+        receiver = GazeboUDPReceiver()
+        valid_json = json.dumps({
+            "sim_time": 2.5,
+            "position": [10.0, 20.0, 5.0],
+            "velocity": [1.0, 0.0, 0.0],
+            "orientation": [1.0, 0.0, 0.0, 0.0],
+            "flight_mode": "HOVER",
+        })
+
+        success = receiver.process_data(valid_json)
+        self.assertTrue(success)
+        self.assertEqual(receiver.packets_received, 1)
+        self.assertEqual(receiver.packets_dropped, 0)
+        self.assertEqual(receiver.current_pose.x, 10.0)
+        self.assertEqual(receiver.current_pose.y, 20.0)
+        self.assertEqual(receiver.current_pose.z, 5.0)
+        self.assertEqual(receiver.current_pose.flight_mode, "HOVER")
+
+    def test_malformed_packet(self) -> None:
+        """Requirement ES-025B.2: Malformed JSON or invalid bytes do not crash the receiver."""
+        from gazebo import GazeboUDPReceiver
+
+        receiver = GazeboUDPReceiver()
+
+        # Non-JSON string
+        self.assertFalse(receiver.process_data("not valid json {"))
+        self.assertEqual(receiver.packets_dropped, 1)
+
+        # Non-dictionary JSON
+        self.assertFalse(receiver.process_data(json.dumps([1, 2, 3])))
+        self.assertEqual(receiver.packets_dropped, 2)
+
+        # Invalid raw bytes
+        self.assertFalse(receiver.process_data(b"\xff\xfe\x00\x00"))
+        self.assertEqual(receiver.packets_dropped, 3)
+        self.assertEqual(receiver.packets_received, 0)
+
+    def test_missing_fields(self) -> None:
+        """Requirement ES-025B.3: Packets with missing optional fields fallback cleanly; missing coordinates drop."""
+        from gazebo import GazeboUDPReceiver
+
+        receiver = GazeboUDPReceiver()
+
+        # Missing position coordinates completely -> dropped
+        bad_packet = json.dumps({"sim_time": 1.0, "flight_mode": "IDLE"})
+        self.assertFalse(receiver.process_data(bad_packet))
+        self.assertEqual(receiver.packets_dropped, 1)
+
+        # Position present, but orientation/flight_mode omitted -> uses safe defaults
+        minimal_packet = json.dumps({"position": [1.0, 2.0, 3.0]})
+        self.assertTrue(receiver.process_data(minimal_packet))
+        self.assertEqual(receiver.current_pose.x, 1.0)
+        self.assertEqual(receiver.current_pose.y, 2.0)
+        self.assertEqual(receiver.current_pose.z, 3.0)
+        self.assertEqual(receiver.current_pose.qw, 1.0)
+        self.assertEqual(receiver.current_pose.flight_mode, "UNKNOWN")
+
+    def test_position_update(self) -> None:
+        """Requirement ES-025B.4: Sequential position updates update current_pose and trigger callback."""
+        from gazebo import GazeboUDPReceiver, VisualPose
+
+        received_poses: list[VisualPose] = []
+
+        def on_pose(pose: VisualPose) -> None:
+            received_poses.append(pose)
+
+        receiver = GazeboUDPReceiver(on_pose_updated=on_pose)
+
+        # 1. Initial ground state
+        receiver.process_data(json.dumps({"position": [0.0, 0.0, 0.0], "sim_time": 0.0}))
+        self.assertEqual(receiver.current_pose.as_tuple()[:3], (0.0, 0.0, 0.0))
+
+        # 2. Takeoff climb
+        receiver.process_data(json.dumps({"position": [0.0, 0.0, 3.0], "sim_time": 1.0}))
+        self.assertEqual(receiver.current_pose.as_tuple()[:3], (0.0, 0.0, 3.0))
+
+        # 3. Horizontal transit
+        receiver.process_data(json.dumps({"position": [5.0, -2.0, 3.0], "sim_time": 2.0}))
+        self.assertEqual(receiver.current_pose.as_tuple()[:3], (5.0, -2.0, 3.0))
+
+        self.assertEqual(len(received_poses), 3)
+
+    def test_yaw_update(self) -> None:
+        """Requirement ES-025B.5: Orientation quaternion updates reflect yaw rotation."""
+        from gazebo import GazeboUDPReceiver
+
+        receiver = GazeboUDPReceiver()
+
+        # Heading North: qw = sqrt(0.5), qz = sqrt(0.5)
+        north_packet = json.dumps({
+            "position": [0.0, 0.0, 5.0],
+            "orientation": [math.sqrt(0.5), 0.0, 0.0, math.sqrt(0.5)],
+        })
+        receiver.process_data(north_packet)
+        self.assertAlmostEqual(receiver.current_pose.qw, math.sqrt(0.5))
+        self.assertAlmostEqual(receiver.current_pose.qz, math.sqrt(0.5))
+
+    def test_receiver_when_gazebo_unavailable(self) -> None:
+        """Requirement ES-025B.6: Receiver operates without errors when Gazebo is not installed/running."""
+        from gazebo import GazeboUDPReceiver
+
+        receiver = GazeboUDPReceiver()
+        self.assertTrue(receiver.start())
+        self.assertTrue(receiver.is_running())
+
+        # Calling receive_once when nothing is sending times out cleanly
+        self.assertFalse(receiver.receive_once())
+
+        receiver.stop()
+        self.assertFalse(receiver.is_running())
+
+    def test_repeated_packets(self) -> None:
+        """Requirement ES-025B.7: Identical consecutive packets are safely processed without state corruption."""
+        from gazebo import GazeboUDPReceiver
+
+        receiver = GazeboUDPReceiver()
+        packet = json.dumps({
+            "sim_time": 5.0,
+            "position": [1.0, 2.0, 3.0],
+            "orientation": [1.0, 0.0, 0.0, 0.0],
+            "flight_mode": "HOVER",
+        })
+
+        for _ in range(10):
+            success = receiver.process_data(packet)
+            self.assertTrue(success)
+
+        self.assertEqual(receiver.packets_received, 10)
+        self.assertEqual(receiver.packets_dropped, 0)
+        self.assertEqual(receiver.current_pose.x, 1.0)
+        self.assertEqual(receiver.current_pose.y, 2.0)
+        self.assertEqual(receiver.current_pose.z, 3.0)
+
+
 if __name__ == "__main__":
     unittest.main()

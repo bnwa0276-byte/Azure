@@ -1,0 +1,157 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <model name="drone">
+    <!-- Visual entity only: static prevents Gazebo physics engine from applying dynamics -->
+    <static>true</static>
+    <link name="base_link">
+      <pose>0 0 0.05 0 0 0</pose>
+
+      <!-- Central Body / Fuselage -->
+      <visual name="body_visual">
+        <geometry>
+          <box>
+            <size>0.24 0.24 0.06</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.2 0.2 0.25 1.0</ambient>
+          <diffuse>0.2 0.2 0.25 1.0</diffuse>
+        </material>
+      </visual>
+
+      <!-- Front Direction Marker (Bright Red Nose on +X axis) -->
+      <visual name="front_marker_visual">
+        <pose>0.15 0 0 0 0 0</pose>
+        <geometry>
+          <sphere>
+            <radius>0.04</radius>
+          </sphere>
+        </geometry>
+        <material>
+          <ambient>0.9 0.1 0.1 1.0</ambient>
+          <diffuse>0.9 0.1 0.1 1.0</diffuse>
+        </material>
+      </visual>
+
+      <!-- Arm 1: Front-Right (+X, -Y) -->
+      <visual name="arm_fr_visual">
+        <pose>0.12 -0.12 0 0 0 -0.785398</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.015</radius>
+            <length>0.20</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.4 0.4 0.4 1.0</ambient>
+          <diffuse>0.4 0.4 0.4 1.0</diffuse>
+        </material>
+      </visual>
+
+      <!-- Arm 2: Front-Left (+X, +Y) -->
+      <visual name="arm_fl_visual">
+        <pose>0.12 0.12 0 0 0 0.785398</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.015</radius>
+            <length>0.20</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.4 0.4 0.4 1.0</ambient>
+          <diffuse>0.4 0.4 0.4 1.0</diffuse>
+        </material>
+      </visual>
+
+      <!-- Arm 3: Rear-Left (-X, +Y) -->
+      <visual name="arm_rl_visual">
+        <pose>-0.12 0.12 0 0 0 -0.785398</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.015</radius>
+            <length>0.20</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.3 0.3 0.3 1.0</ambient>
+          <diffuse>0.3 0.3 0.3 1.0</diffuse>
+        </material>
+      </visual>
+
+      <!-- Arm 4: Rear-Right (-X, -Y) -->
+      <visual name="arm_rr_visual">
+        <pose>-0.12 -0.12 0 0 0 0.785398</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.015</radius>
+            <length>0.20</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.3 0.3 0.3 1.0</ambient>
+          <diffuse>0.3 0.3 0.3 1.0</diffuse>
+        </material>
+      </visual>
+
+      <!-- Rotor 1: Front-Right (+X, -Y) -->
+      <visual name="rotor_fr_visual">
+        <pose>0.20 -0.20 0.04 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.09</radius>
+            <length>0.005</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.8 0.2 0.2 0.8</ambient>
+          <diffuse>0.8 0.2 0.2 0.8</diffuse>
+        </material>
+      </visual>
+
+      <!-- Rotor 2: Front-Left (+X, +Y) -->
+      <visual name="rotor_fl_visual">
+        <pose>0.20 0.20 0.04 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.09</radius>
+            <length>0.005</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.8 0.2 0.2 0.8</ambient>
+          <diffuse>0.8 0.2 0.2 0.8</diffuse>
+        </material>
+      </visual>
+
+      <!-- Rotor 3: Rear-Left (-X, +Y) -->
+      <visual name="rotor_rl_visual">
+        <pose>-0.20 0.20 0.04 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.09</radius>
+            <length>0.005</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.2 0.2 0.2 0.8</ambient>
+          <diffuse>0.2 0.2 0.2 0.8</diffuse>
+        </material>
+      </visual>
+
+      <!-- Rotor 4: Rear-Right (-X, -Y) -->
+      <visual name="rotor_rr_visual">
+        <pose>-0.20 -0.20 0.04 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.09</radius>
+            <length>0.005</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.2 0.2 0.2 0.8</ambient>
+          <diffuse>0.2 0.2 0.2 0.8</diffuse>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>
