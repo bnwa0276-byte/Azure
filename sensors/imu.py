@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Tuple
 
 from .base import Sensor, SensorStatus
 
@@ -16,6 +16,7 @@ class IMUSensor(Sensor):
     def __init__(self, status: SensorStatus = SensorStatus.OK) -> None:
         self.name = "IMU"
         self.status = SensorStatus.OK
+        self.last_accel: Tuple[float, float, float] = (0.0, 0.0, 0.0)
         self.initialize()
         self.update(status=status)
 

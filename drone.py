@@ -117,6 +117,15 @@ class HealthStatus:
             except Exception:
                 logger.exception("GPS failed to read from physics.")
 
+        if hasattr(self.imu, "read_from_physics"):
+            try:
+                try:
+                    self.imu.read_from_physics(physics, environment)
+                except TypeError:
+                    self.imu.read_from_physics(physics)
+            except Exception:
+                logger.exception("IMU failed to read from physics.")
+
     @property
     def battery_level(self) -> float:
         """Return the current battery level."""
