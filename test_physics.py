@@ -4,6 +4,7 @@ from physics import PhysicsEngine, GRAVITY
 from drone import Drone, FlightMode
 from flight_controller import FlightController
 from environment.model import Environment
+from hal.simulated import SimulatedSensors
 
 
 class PhysicsEngineTests(unittest.TestCase):
@@ -555,6 +556,212 @@ class RelativeWindAerodynamicDragTests(unittest.TestCase):
         engine.step(0.1, wind_velocity=(-5.0, -3.0))
         self.assertAlmostEqual(engine.acceleration[0], -5.0)
         self.assertAlmostEqual(engine.acceleration[1], 0.0)
+
+
+class ImplicitAerodynamicDragTests(unittest.TestCase):
+    """Regression tests for ES-024K: opt-in implicit aerodynamic drag integration."""
+
+    def test_opt_in_flag(self) -> None:
+        """Requirement A: Default engine uses explicit mode; implicit_drag=True activates implicit mode."""
+        engine_default = PhysicsEngine()
+        self.assertFalse(engine_default.implicit_drag)
+
+        engine_implicit = PhysicsEngine(implicit_drag=True)
+        self.assertTrue(engine_implicit.implicit_drag)
+
+    def test_large_cd_dt_stability(self) -> None:
+        """Requirement B: Deliberately coarse timesteps (Cd*dt = 5.0, 10.0) do not oscillate or diverge."""
+        # Cd = 2.0, dt = 2.5 -> Cd*dt = 5.0 (explicit Euler would amplify perturbation by 1 - 5 = -4, diverging!)
+        engine = PhysicsEngine(
+            position=(0.0, 0.0, 10.0),
+            velocity=(12.0, -6.0, 0.0),
+            drag_coeff_horizontal=2.0,
+            implicit_drag=True,
+        )
+        engine.step(2.5)
+
+        # In implicit Euler, v_new = v_old / (1 + 5.0) = v_old / 6.0
+        expected_vx = 12.0 / 6.0  # 2.0
+        expected_vy = -6.0 / 6.0  # -1.0
+        self.assertAlmostEqual(engine.velocity[0], expected_vx, places=5)
+        self.assertAlmostEqual(engine.velocity[1], expected_vy, places=5)
+        self.assertGreater(engine.velocity[0], 0.0)
+        self.assertLess(engine.velocity[1], 0.0)
+
+        # Next step with dt = 5.0 -> Cd*dt = 10.0
+        engine.step(5.0)
+        expected_vx_step2 = expected_vx / (1.0 + 2.0 * 5.0)  # 2.0 / 11.0
+        expected_vy_step2 = expected_vy / (1.0 + 2.0 * 5.0)  # -1.0 / 11.0
+        self.assertAlmostEqual(engine.velocity[0], expected_vx_step2, places=5)
+        self.assertAlmostEqual(engine.velocity[1], expected_vy_step2, places=5)
+        self.assertGreater(engine.velocity[0], 0.0)
+        self.assertLess(engine.velocity[1], 0.0)
+
+    def test_monotonic_convergence_in_still_air(self) -> None:
+        """Requirement C: In still air, velocity damps toward zero monotonically without sign-flipping."""
+        # Cd = 1.5, dt = 1.0 -> Cd*dt = 1.5 (in explicit Euler, 1 < Cd*dt < 2 causes sign-flipping oscillation)
+        engine = PhysicsEngine(
+            position=(0.0, 0.0, 10.0),
+            velocity=(20.0, 0.0, 0.0),
+            drag_coeff_horizontal=1.5,
+            implicit_drag=True,
+        )
+
+        for _ in range(10):
+            prev_vx = engine.velocity[0]
+            engine.step(1.0)
+            curr_vx = engine.velocity[0]
+            # Must strictly decrease in magnitude and never flip sign
+            self.assertGreater(curr_vx, 0.0)
+            self.assertLess(curr_vx, prev_vx)
+
+        self.assertAlmostEqual(engine.velocity[0], 0.0, delta=0.01)
+
+    def test_wind_convergence_without_oscillation(self) -> None:
+        """Requirement D: With nonzero wind, velocity approaches wind without oscillatory sign-flipping."""
+        # Wind = (10.0, 0.0), Cd = 2.0, dt = 1.0 -> Cd*dt = 2.0 (marginal stability in explicit Euler)
+        engine = PhysicsEngine(
+            position=(0.0, 0.0, 10.0),
+            velocity=(0.0, 0.0, 0.0),
+            drag_coeff_horizontal=2.0,
+            implicit_drag=True,
+        )
+        env = Environment(steady_wind=(10.0, 0.0), turbulence_strength=0.0, enabled=True)
+
+        for _ in range(8):
+            prev_vx = engine.velocity[0]
+            engine.step(1.0, environment=env)
+            curr_vx = engine.velocity[0]
+            # Velocity monotonically approaches 10.0 from below, never overshooting 10.0
+            self.assertGreaterEqual(curr_vx, prev_vx)
+            self.assertLessEqual(curr_vx, 10.0)
+
+        self.assertAlmostEqual(engine.velocity[0], 10.0, delta=0.05)
+
+    def test_zero_relative_wind(self) -> None:
+        """Requirement E: Vehicle velocity = wind velocity -> zero drag acceleration."""
+        engine = PhysicsEngine(
+            position=(0.0, 0.0, 10.0),
+            velocity=(6.0, -3.0, 0.0),
+            drag_coeff_horizontal=0.5,
+            implicit_drag=True,
+        )
+        env = Environment(steady_wind=(6.0, -3.0), turbulence_strength=0.0, enabled=True)
+        engine.step(0.1, environment=env)
+
+        self.assertAlmostEqual(engine.acceleration[0], 0.0)
+        self.assertAlmostEqual(engine.acceleration[1], 0.0)
+        self.assertAlmostEqual(engine.velocity[0], 6.0)
+        self.assertAlmostEqual(engine.velocity[1], -3.0)
+
+    def test_zero_drag_equivalence(self) -> None:
+        """Requirement F: With Cd=0, implicit mode produces identical result to explicit Euler."""
+        engine_exp = PhysicsEngine(position=(0.0, 0.0, 10.0), velocity=(5.0, -2.0, 3.0), drag_coeff_horizontal=0.0, drag_coeff_vertical=0.0, implicit_drag=False)
+        engine_imp = PhysicsEngine(position=(0.0, 0.0, 10.0), velocity=(5.0, -2.0, 3.0), drag_coeff_horizontal=0.0, drag_coeff_vertical=0.0, implicit_drag=True)
+
+        engine_exp.step(0.05)
+        engine_imp.step(0.05)
+
+        self.assertEqual(engine_exp.position, engine_imp.position)
+        self.assertEqual(engine_exp.velocity, engine_imp.velocity)
+        self.assertEqual(engine_exp.acceleration, engine_imp.acceleration)
+
+    def test_small_step_closeness_to_explicit(self) -> None:
+        """Requirement G: With small dt, implicit and explicit solutions agree closely within numerical tolerance."""
+        dt = 0.001
+        engine_exp = PhysicsEngine(velocity=(5.0, -3.0, 0.0), drag_coeff_horizontal=0.5, implicit_drag=False)
+        engine_imp = PhysicsEngine(velocity=(5.0, -3.0, 0.0), drag_coeff_horizontal=0.5, implicit_drag=True)
+
+        engine_exp.step(dt)
+        engine_imp.step(dt)
+
+        # O(dt^2) difference: for dt=0.001, Cd=0.5, (Cd*dt)^2 = 2.5e-7
+        self.assertAlmostEqual(engine_imp.velocity[0], engine_exp.velocity[0], places=4)
+        self.assertAlmostEqual(engine_imp.velocity[1], engine_exp.velocity[1], places=4)
+
+    def test_vertical_drag_large_cd_dt_stability(self) -> None:
+        """Requirement H: Implicit vertical drag produces stable non-divergent behavior for large Cd*dt."""
+        # Hover thrust so a_non_drag_z = 0, initial vz = 10.0, Cd_v = 3.0, dt = 2.0 -> Cd_v * dt = 6.0
+        engine = PhysicsEngine(
+            position=(0.0, 0.0, 50.0),
+            velocity=(0.0, 0.0, 10.0),
+            target_thrust_accel=GRAVITY,
+            actual_thrust_accel=GRAVITY,
+            drag_coeff_vertical=3.0,
+            implicit_drag=True,
+        )
+        engine.step(2.0)
+
+        # vz_new = 10.0 / (1 + 6.0) = 1.42857...
+        expected_vz = 10.0 / 7.0
+        self.assertAlmostEqual(engine.velocity[2], expected_vz, places=5)
+        self.assertGreater(engine.velocity[2], 0.0)
+        self.assertLess(engine.velocity[2], 10.0)
+
+    def test_ground_contact_under_implicit_integration(self) -> None:
+        """Requirement I: Implicit integration preserves no-penetration, downward velocity removal, and liftoff."""
+        # 1. Contact impact
+        engine = PhysicsEngine(
+            position=(0.0, 0.0, 0.5),
+            velocity=(0.0, 0.0, -5.0),
+            target_thrust_accel=0.0,
+            actual_thrust_accel=0.0,
+            drag_coeff_vertical=0.5,
+            implicit_drag=True,
+        )
+        # Step into ground
+        engine.step(0.2)
+        self.assertAlmostEqual(engine.position[2], 0.0)
+        self.assertAlmostEqual(engine.velocity[2], 0.0)
+        self.assertAlmostEqual(engine.acceleration[2], 0.0)
+
+        # 2. Resting contact stability
+        engine.step(0.1)
+        self.assertAlmostEqual(engine.position[2], 0.0)
+        self.assertAlmostEqual(engine.velocity[2], 0.0)
+        self.assertAlmostEqual(engine.acceleration[2], 0.0)
+
+        # 3. Liftoff
+        climb_thrust = GRAVITY + 4.0
+        engine.set_thrust_acceleration(climb_thrust)
+        engine.step(0.1)
+        self.assertGreater(engine.acceleration[2], 0.0)
+        self.assertGreater(engine.velocity[2], 0.0)
+        self.assertGreater(engine.position[2], 0.0)
+
+    def test_acceleration_consistency(self) -> None:
+        """Requirement J: Reported acceleration equals (velocity_new - velocity_old) / dt."""
+        dt = 0.05
+        engine = PhysicsEngine(
+            position=(0.0, 0.0, 20.0),
+            velocity=(4.0, -3.0, 2.0),
+            drag_coeff_horizontal=0.6,
+            drag_coeff_vertical=0.4,
+            implicit_drag=True,
+        )
+        vx0, vy0, vz0 = engine.velocity
+        engine.step(dt)
+        vx1, vy1, vz1 = engine.velocity
+
+        self.assertAlmostEqual(engine.acceleration[0], (vx1 - vx0) / dt, places=6)
+        self.assertAlmostEqual(engine.acceleration[1], (vy1 - vy0) / dt, places=6)
+        self.assertAlmostEqual(engine.acceleration[2], (vz1 - vz0) / dt, places=6)
+
+    def test_imu_compatibility(self) -> None:
+        """Requirement K: Acceleration from implicit mode is sampled by IMU and matches physics."""
+        drone = Drone()
+        drone.physics.implicit_drag = True
+        drone.physics.drag_coeff_horizontal = 0.5
+        drone.command_climb(accel=3.0)
+        drone.step_physics(0.1)
+
+        # IMU should sample the acceleration from physics
+        self.assertEqual(drone.health_monitor.imu.last_accel, drone.physics.acceleration)
+        self.assertGreater(drone.health_monitor.imu.last_accel[2], 0.0)
+
+        # HAL SimulatedSensors should also reflect this
+        sensors = SimulatedSensors(drone.health_monitor)
+        self.assertEqual(sensors.last_accel(), drone.physics.acceleration)
 
 
 if __name__ == "__main__":

@@ -36,6 +36,7 @@ class PhysicsEngine:
     thrust_accel: float = GRAVITY
     drag_coeff_vertical: float = 0.0
     drag_coeff_horizontal: float = 0.0
+    implicit_drag: bool = False
 
     def __post_init__(self) -> None:
         """Keep the public `thrust_accel` field aligned with the actual response state."""
@@ -49,6 +50,7 @@ class PhysicsEngine:
         if self.drag_coeff_horizontal < 0.0:
             raise ValueError(f"drag_coeff_horizontal must be non-negative, got {self.drag_coeff_horizontal}")
         self.drag_coeff_horizontal = float(self.drag_coeff_horizontal)
+        self.implicit_drag = bool(self.implicit_drag)
 
     def _response_factor(self, dt: float) -> float:
         """Compute a stable first-order response factor for a given timestep."""
@@ -134,18 +136,45 @@ class PhysicsEngine:
         if cd_h == 0.0 and environment is not None and hasattr(environment, "drag_coef"):
             cd_h = max(0.0, float(getattr(environment, "drag_coef", 0.0)))
 
-        # Compute net horizontal accelerations using relative air velocity:
-        # v_rel = v_vehicle - v_wind
-        # a_drag = -cd_h * v_rel
-        # When vehicle velocity equals wind velocity, aerodynamic drag is zero.
-        ax = ex_ax - cd_h * (vx - wx)
-        ay = ex_ay - cd_h * (vy - wy)
-        az = self.actual_thrust_accel - GRAVITY - self.drag_coeff_vertical * vz + ex_az
+        # Compute net horizontal and vertical accelerations and update velocities
+        if self.implicit_drag:
+            # Backward-Euler (implicit) linear aerodynamic drag integration (ES-024K).
+            # Unconditionally stable for any dt > 0 and Cd >= 0.
+            # v_new = (v_old + dt * a_non_drag + Cd * dt * wind) / (1 + Cd * dt)
+            if dt > 0.0:
+                denom_h = 1.0 + cd_h * dt
+                vx_new = (vx + ex_ax * dt + cd_h * dt * wx) / denom_h
+                vy_new = (vy + ex_ay * dt + cd_h * dt * wy) / denom_h
 
-        # integrate velocity and position (semi-implicit Euler)
-        vx = vx + ax * dt
-        vy = vy + ay * dt
-        vz = vz + az * dt
+                a_non_drag_z = self.actual_thrust_accel - GRAVITY + ex_az
+                denom_v = 1.0 + self.drag_coeff_vertical * dt
+                vz_new = (vz + a_non_drag_z * dt) / denom_v
+
+                ax = (vx_new - vx) / dt
+                ay = (vy_new - vy) / dt
+                az = (vz_new - vz) / dt
+
+                vx = vx_new
+                vy = vy_new
+                vz = vz_new
+            else:
+                ax = ex_ax - cd_h * (vx - wx)
+                ay = ex_ay - cd_h * (vy - wy)
+                az = self.actual_thrust_accel - GRAVITY - self.drag_coeff_vertical * vz + ex_az
+        else:
+            # Explicit Euler linear aerodynamic drag integration (legacy/default).
+            # Compute net horizontal accelerations using relative air velocity:
+            # v_rel = v_vehicle - v_wind
+            # a_drag = -cd_h * v_rel
+            # When vehicle velocity equals wind velocity, aerodynamic drag is zero.
+            ax = ex_ax - cd_h * (vx - wx)
+            ay = ex_ay - cd_h * (vy - wy)
+            az = self.actual_thrust_accel - GRAVITY - self.drag_coeff_vertical * vz + ex_az
+
+            # integrate velocity (semi-implicit Euler)
+            vx = vx + ax * dt
+            vy = vy + ay * dt
+            vz = vz + az * dt
 
         x = x + vx * dt
         y = y + vy * dt
