@@ -28,6 +28,7 @@ class SimulationRunner:
     metrics: Optional[ControllerMetrics] = None
     recorder: Optional[FlightRecorder] = None
     estimator: Optional[ComplementaryEstimator] = None
+    environment: Optional[object] = None
 
     def start(self) -> None:
         self.running = True
@@ -45,8 +46,8 @@ class SimulationRunner:
         # update controller
         self.controller.update(self.dt)
 
-        # advance physics
-        self.drone.step_physics(self.dt)
+        # advance physics with environment and sim_time propagation (ES-024I)
+        self.drone.step_physics(self.dt, environment=self.environment, sim_time=self.sim_time)
 
         # optional navigation can be stepped here if desired
         self.sim_time += self.dt

@@ -79,20 +79,45 @@ class PhysicsEngine:
         vx, vy, _ = self.velocity
         self.velocity = (vx, vy, 0.0)
 
-    def step(self, dt: float, environment: object | None = None, sim_time: float = 0.0) -> None:
+    def step(
+        self,
+        dt: float,
+        environment: object | None = None,
+        sim_time: float = 0.0,
+        wind_velocity: Tuple[float, float] | Tuple[float, float, float] | None = None,
+    ) -> None:
         """Advance the physics simulation by time step `dt` seconds.
 
-        If an environment is provided, the engine will query it for external
-        accelerations and include them in the integration.
+        Aerodynamic drag is computed canonically by PhysicsEngine using relative
+        air velocity (ES-024I):
+            v_rel = v_vehicle - v_wind
+            a_drag = -Cd * v_rel
+
+        Args:
+            dt: time step in seconds
+            environment: optional environment providing external disturbances and wind
+            sim_time: current simulation time in seconds
+            wind_velocity: optional direct (wx, wy) or (wx, wy, wz) wind velocity vector
         """
         x, y, z = self.position
         vx, vy, vz = self.velocity
 
-        # external acceleration
+        # External non-aerodynamic acceleration (e.g. vertical turbulence)
         if environment is not None and hasattr(environment, "get_external_acceleration"):
             ex_ax, ex_ay, ex_az = environment.get_external_acceleration(self.position, self.velocity, sim_time)
         else:
             ex_ax = ex_ay = ex_az = 0.0
+
+        # Environmental wind velocity vector (wx, wy)
+        if wind_velocity is not None:
+            wx = float(wind_velocity[0])
+            wy = float(wind_velocity[1])
+        elif environment is not None and hasattr(environment, "get_wind_velocity"):
+            w = environment.get_wind_velocity(self.position, self.velocity, sim_time)
+            wx = float(w[0])
+            wy = float(w[1])
+        else:
+            wx = wy = 0.0
 
         # First-order motor response: actual thrust lags the commanded target
         # but is bounded to prevent unstable jumps for large dt values.
@@ -100,9 +125,21 @@ class PhysicsEngine:
         self.actual_thrust_accel += (self.target_thrust_accel - self.actual_thrust_accel) * response_factor
         self.thrust_accel = self.actual_thrust_accel
 
-        # compute net horizontal and vertical accelerations
-        ax = ex_ax - self.drag_coeff_horizontal * vx
-        ay = ex_ay - self.drag_coeff_horizontal * vy
+        # Determine canonical horizontal drag coefficient:
+        # PhysicsEngine owns physical drag. If drag_coeff_horizontal is explicitly set (> 0.0),
+        # it is authoritative. If it is 0.0 and an environment with drag_coef is supplied,
+        # fallback to environment.drag_coef for backward compatibility with existing tests/callers.
+        # Under NO circumstance are both applied.
+        cd_h = self.drag_coeff_horizontal
+        if cd_h == 0.0 and environment is not None and hasattr(environment, "drag_coef"):
+            cd_h = max(0.0, float(getattr(environment, "drag_coef", 0.0)))
+
+        # Compute net horizontal accelerations using relative air velocity:
+        # v_rel = v_vehicle - v_wind
+        # a_drag = -cd_h * v_rel
+        # When vehicle velocity equals wind velocity, aerodynamic drag is zero.
+        ax = ex_ax - cd_h * (vx - wx)
+        ay = ex_ay - cd_h * (vy - wy)
         az = self.actual_thrust_accel - GRAVITY - self.drag_coeff_vertical * vz + ex_az
 
         # integrate velocity and position (semi-implicit Euler)

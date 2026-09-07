@@ -3,6 +3,7 @@ import unittest
 from drone import Drone, FlightMode
 from flight_controller import FlightController
 from simulation_runner import SimulationRunner
+from environment.model import Environment
 
 
 class SimulationRunnerTests(unittest.TestCase):
@@ -41,6 +42,24 @@ class SimulationRunnerTests(unittest.TestCase):
         self.assertIn("LANDING_REQUESTED", names)
         self.assertIn("LANDING_COMPLETED", names)
         self.assertEqual(drone.mode, FlightMode.IDLE)
+
+    def test_environment_propagation_to_physics(self) -> None:
+        """Requirement G: SimulationRunner forwards environment and sim_time to physics."""
+        drone = Drone()
+        drone.physics.position = (0.0, 0.0, 10.0)
+        drone.physics.velocity = (0.0, 0.0, 0.0)
+        drone.physics.drag_coeff_horizontal = 0.5
+        controller = FlightController(drone)
+        env = Environment(steady_wind=(10.0, 0.0), turbulence_strength=0.0, enabled=True)
+
+        runner = SimulationRunner(drone, controller, dt=0.1, environment=env)
+        runner.step()
+
+        # After one step of 0.1s with steady wind 10.0 m/s and Cd 0.5:
+        # ax = -0.5 * (0.0 - 10.0) = +5.0 m/s^2
+        # vx = 0.0 + 5.0 * 0.1 = 0.5 m/s
+        self.assertAlmostEqual(drone.physics.velocity[0], 0.5, places=5)
+        self.assertAlmostEqual(runner.sim_time, 0.1)
 
 
 if __name__ == "__main__":

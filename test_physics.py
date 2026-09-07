@@ -3,6 +3,7 @@ import unittest
 from physics import PhysicsEngine, GRAVITY
 from drone import Drone, FlightMode
 from flight_controller import FlightController
+from environment.model import Environment
 
 
 class PhysicsEngineTests(unittest.TestCase):
@@ -447,6 +448,113 @@ class HorizontalDragTests(unittest.TestCase):
         self.assertAlmostEqual(engine.velocity[0], engine_h_only.velocity[0])
         self.assertAlmostEqual(engine.velocity[1], engine_h_only.velocity[1])
         self.assertNotEqual(engine.acceleration[2], engine_h_only.acceleration[2])
+
+
+class RelativeWindAerodynamicDragTests(unittest.TestCase):
+    """Regression tests for ES-024I: unified aerodynamic drag and relative wind."""
+
+    def test_zero_relative_wind_produces_zero_drag(self) -> None:
+        """Requirement A: vehicle velocity = (5, -3, 0), wind = (5, -3) -> drag = (0, 0)."""
+        engine = PhysicsEngine(
+            position=(0.0, 0.0, 10.0),
+            velocity=(5.0, -3.0, 0.0),
+            drag_coeff_horizontal=0.5,
+        )
+        env = Environment(steady_wind=(5.0, -3.0), turbulence_strength=0.0, enabled=True)
+        engine.step(0.1, environment=env)
+
+        self.assertAlmostEqual(engine.acceleration[0], 0.0)
+        self.assertAlmostEqual(engine.acceleration[1], 0.0)
+        self.assertAlmostEqual(engine.velocity[0], 5.0)
+        self.assertAlmostEqual(engine.velocity[1], -3.0)
+
+    def test_still_air_drag_opposes_velocity(self) -> None:
+        """Requirement B: wind = (0, 0), velocity = (5, -3, 0) -> drag opposes velocity."""
+        engine = PhysicsEngine(
+            position=(0.0, 0.0, 10.0),
+            velocity=(5.0, -3.0, 0.0),
+            drag_coeff_horizontal=0.5,
+        )
+        env = Environment(steady_wind=(0.0, 0.0), turbulence_strength=0.0, enabled=True)
+        engine.step(0.1, environment=env)
+
+        # ax = -0.5 * 5.0 = -2.5; ay = -0.5 * (-3.0) = +1.5
+        self.assertAlmostEqual(engine.acceleration[0], -2.5)
+        self.assertAlmostEqual(engine.acceleration[1], 1.5)
+        self.assertLess(engine.velocity[0], 5.0)
+        self.assertGreater(engine.velocity[1], -3.0)
+
+    def test_headwind_doubles_drag_relative_to_still_air(self) -> None:
+        """Requirement C: vehicle +5 m/s, wind -5 m/s -> relative airspeed +10 m/s.
+
+        Drag magnitude must be twice that of the still-air (+5 m/s vehicle, 0 m/s wind) case.
+        """
+        engine_still = PhysicsEngine(
+            position=(0.0, 0.0, 10.0),
+            velocity=(5.0, 0.0, 0.0),
+            drag_coeff_horizontal=0.5,
+        )
+        env_still = Environment(steady_wind=(0.0, 0.0), turbulence_strength=0.0, enabled=True)
+        engine_still.step(0.1, environment=env_still)
+
+        engine_headwind = PhysicsEngine(
+            position=(0.0, 0.0, 10.0),
+            velocity=(5.0, 0.0, 0.0),
+            drag_coeff_horizontal=0.5,
+        )
+        env_headwind = Environment(steady_wind=(-5.0, 0.0), turbulence_strength=0.0, enabled=True)
+        engine_headwind.step(0.1, environment=env_headwind)
+
+        # Still: a = -0.5 * 5.0 = -2.5; Headwind: a = -0.5 * (5.0 - (-5.0)) = -5.0
+        self.assertAlmostEqual(engine_still.acceleration[0], -2.5)
+        self.assertAlmostEqual(engine_headwind.acceleration[0], -5.0)
+        self.assertAlmostEqual(abs(engine_headwind.acceleration[0]), 2.0 * abs(engine_still.acceleration[0]))
+
+    def test_tailwind_matching_velocity_produces_zero_drag(self) -> None:
+        """Requirement D: vehicle velocity = wind velocity -> horizontal drag is zero."""
+        engine = PhysicsEngine(
+            position=(0.0, 0.0, 10.0),
+            velocity=(8.0, 4.0, 0.0),
+            drag_coeff_horizontal=0.8,
+        )
+        env = Environment(steady_wind=(8.0, 4.0), turbulence_strength=0.0, enabled=True)
+        engine.step(0.1, environment=env)
+
+        self.assertAlmostEqual(engine.acceleration[0], 0.0)
+        self.assertAlmostEqual(engine.acceleration[1], 0.0)
+        self.assertAlmostEqual(engine.velocity[0], 8.0)
+        self.assertAlmostEqual(engine.velocity[1], 4.0)
+
+    def test_no_double_counting_with_environment_and_physics(self) -> None:
+        """Requirement E: canonical Cd = 0.5, vx = 4 m/s in still air -> ax = -2.0 m/s^2, NOT -4.0 m/s^2."""
+        engine = PhysicsEngine(
+            position=(0.0, 0.0, 10.0),
+            velocity=(4.0, 0.0, 0.0),
+            drag_coeff_horizontal=0.5,
+        )
+        env = Environment(steady_wind=(0.0, 0.0), turbulence_strength=0.0, drag_coef=0.5, enabled=True)
+        engine.step(0.1, environment=env)
+
+        # Aerodynamic drag must be applied exactly once (-0.5 * 4.0 = -2.0 m/s^2)
+        self.assertAlmostEqual(engine.acceleration[0], -2.0)
+        self.assertNotEqual(engine.acceleration[0], -4.0)
+
+    def test_direct_wind_velocity_parameter(self) -> None:
+        """Requirement F: PhysicsEngine accepts direct wind_velocity without Environment object."""
+        engine = PhysicsEngine(
+            position=(0.0, 0.0, 10.0),
+            velocity=(5.0, -3.0, 0.0),
+            drag_coeff_horizontal=0.5,
+        )
+        # zero relative wind directly
+        engine.step(0.1, wind_velocity=(5.0, -3.0))
+        self.assertAlmostEqual(engine.acceleration[0], 0.0)
+        self.assertAlmostEqual(engine.acceleration[1], 0.0)
+
+        # opposing wind directly: v_rel = 5.0 - (-5.0) = 10.0 -> a = -5.0
+        engine.step(0.1, wind_velocity=(-5.0, -3.0))
+        self.assertAlmostEqual(engine.acceleration[0], -5.0)
+        self.assertAlmostEqual(engine.acceleration[1], 0.0)
 
 
 if __name__ == "__main__":

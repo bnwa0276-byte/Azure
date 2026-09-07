@@ -33,22 +33,19 @@ class Environment:
         return (sx + gx + tx, sy + gy + ty)
 
     def get_external_acceleration(self, position: Tuple[float, float, float], velocity: Tuple[float, float, float], t: float) -> Tuple[float, float, float]:
-        """Return external acceleration (ax, ay, az) in m/s^2 applied to vehicle."""
+        """Return external non-aerodynamic acceleration (ax, ay, az) in m/s^2 applied to vehicle.
+
+        Aerodynamic drag is computed canonically by PhysicsEngine using relative
+        air velocity (ES-024I). This method returns only external non-aerodynamic
+        disturbances such as vertical turbulence.
+        """
         if not self.enabled:
             return (0.0, 0.0, 0.0)
-
-        wx, wy = self.get_wind_velocity(position, velocity, t)
-        vx, vy, vz = velocity
-        rel_x = wx - vx
-        rel_y = wy - vy
-
-        ax = rel_x * self.drag_coef
-        ay = rel_y * self.drag_coef
 
         # small vertical turbulence
         _, _, tz = self.turbulence.sample()
         az = tz
-        return (ax, ay, az)
+        return (0.0, 0.0, az)
 
     def get_barometer_noise(self) -> float:
         if not self.enabled:
