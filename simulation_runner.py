@@ -81,23 +81,9 @@ class SimulationRunner:
                 self._record_event("LANDING_COMPLETED", {"altitude": self.drone.altitude})
                 lr["_runner_state"] = "completed"
 
-        # update visualizer (read-only telemetry + positions)
-        if self.visualizer is not None:
-            telemetry = self.telemetry()
-            position = tuple(self.drone.physics.position)
-            waypoints = []
-            if self.navigation is not None and hasattr(self.navigation, "mission"):
-                try:
-                    waypoints = list(getattr(self.navigation.mission, "waypoints", []))
-                except Exception:
-                    waypoints = []
-            path = list(getattr(self, "_path_history", []))
-            path.append(position)
-            self._path_history = path
-            try:
-                self.visualizer.update(telemetry=telemetry, position=position, waypoints=waypoints, path=path)
-            except Exception:
-                pass
+        # compute telemetry snapshot for estimator, visualizer, and recorder
+        telemetry = self.telemetry()
+
         # update estimator (if present) using latest sensor readings
         if self.estimator is not None:
             try:
@@ -119,10 +105,28 @@ class SimulationRunner:
                 telemetry["estimated"] = {"position": est.position, "velocity": est.velocity, "confidence": est.confidence}
             except Exception:
                 pass
+
+        # update visualizer (read-only telemetry + positions)
+        if self.visualizer is not None:
+            position = tuple(self.drone.physics.position)
+            waypoints = []
+            if self.navigation is not None and hasattr(self.navigation, "mission"):
+                try:
+                    mission = getattr(self.navigation, "mission")
+                    waypoints = list(getattr(mission, "waypoints", []))
+                except Exception:
+                    waypoints = []
+            path = list(getattr(self, "_path_history", []))
+            path.append(position)
+            self._path_history = path
+            try:
+                getattr(self.visualizer, "update")(telemetry=telemetry, position=position, waypoints=waypoints, path=path)
+            except Exception:
+                pass
+
         # record telemetry and events to flight recorder if present
         if self.recorder is not None:
             try:
-                telemetry = self.telemetry()
                 # snapshot controller output if available
                 controller_snapshot = None
                 if self.controller.autopilot is not None:

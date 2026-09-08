@@ -44,7 +44,7 @@ class BarometerSensor(Sensor):
         noise = 0.0
         if environment is not None and hasattr(environment, "get_barometer_noise"):
             try:
-                noise = float(environment.get_barometer_noise())
+                noise = float(getattr(environment, "get_barometer_noise")())
             except Exception:
                 noise = 0.0
         self.update(altitude=z + noise)

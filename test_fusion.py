@@ -44,6 +44,7 @@ class FusionTests(unittest.TestCase):
         rng = random.Random(1)
         est = ComplementaryEstimator(alpha=0.9)
         state = None
+        gps = (0.0, 0.0, 0.0)
         for i in range(50):
             dt = 0.1
             imu = (rng.uniform(-0.2, 0.2), rng.uniform(-0.2, 0.2), rng.uniform(-0.2, 0.2))
@@ -52,6 +53,7 @@ class FusionTests(unittest.TestCase):
             state = est.update(dt, gps_pos=gps, baro_alt=baro, imu_accel=imu, gps_available=True)
 
         # After running, estimator position should be near last GPS
+        assert state is not None
         self.assertAlmostEqual(state.position[0], gps[0], delta=0.2)
         self.assertAlmostEqual(state.position[2], gps[2], delta=0.2)
 

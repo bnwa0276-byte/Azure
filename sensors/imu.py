@@ -45,6 +45,6 @@ class IMUSensor(Sensor):
         try:
             acc = getattr(physics, "acceleration", (0.0, 0.0, 0.0))
             # store last known acceleration for fusion
-            self.last_accel = tuple(float(a) for a in acc)
+            self.last_accel = (float(acc[0]), float(acc[1]), float(acc[2]))
         except Exception:
             self.last_accel = (0.0, 0.0, 0.0)

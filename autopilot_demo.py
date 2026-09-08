@@ -14,6 +14,7 @@ def run_demo():
 
     for i in range(20):
         controller.update_altitude_hold(0.1)
+        assert controller.autopilot is not None
         thrust = controller.autopilot.get_last_output()
         drone.step_physics(0.1)
         print(f"t={i*0.1:.1f}s alt={drone.altitude:.3f} thrust={thrust:.3f}")

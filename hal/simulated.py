@@ -1,10 +1,10 @@
 """Simulated implementations of HAL interfaces that adapt existing simulator classes."""
 from __future__ import annotations
 
-from typing import Optional, Tuple, Iterable
+from typing import Optional, Tuple, Iterable, Any
 from hal.interfaces import VehicleInterface, GPSInterface, IMUInterface, BarometerInterface, BatteryInterface, NavigationInterface
 from drone import Drone
-from navigation import NavigationSystem
+from navigation import NavigationSystem, Mission, Waypoint
 
 
 class SimulatedVehicle(VehicleInterface):
@@ -21,7 +21,8 @@ class SimulatedVehicle(VehicleInterface):
         self._drone.step_physics(dt, environment=environment, sim_time=sim_time)
 
     def get_position(self) -> Tuple[float, float, float]:
-        return tuple(self._drone.physics.position)
+        pos = self._drone.physics.position
+        return (float(pos[0]), float(pos[1]), float(pos[2]))
 
     def get_altitude(self) -> float:
         return float(self._drone.altitude)
@@ -34,13 +35,16 @@ class SimulatedVehicle(VehicleInterface):
 
 
 class SimulatedSensors(GPSInterface, IMUInterface, BarometerInterface, BatteryInterface):
-    def __init__(self, health: object):
+    def __init__(self, health: Any):
         # health is expected to be HealthStatus from `drone.py`
-        self._health = health
+        self._health: Any = health
 
     def last_position(self) -> Optional[Tuple[float, float, float]]:
         try:
-            return tuple(getattr(self._health.gps, "last_position"))
+            pos = getattr(self._health.gps, "last_position", None)
+            if pos is not None:
+                return (float(pos[0]), float(pos[1]), float(pos[2]))
+            return None
         except Exception:
             return None
 
@@ -49,7 +53,8 @@ class SimulatedSensors(GPSInterface, IMUInterface, BarometerInterface, BatteryIn
 
     def last_accel(self) -> Tuple[float, float, float]:
         try:
-            return tuple(getattr(self._health.imu, "last_accel"))
+            acc = getattr(self._health.imu, "last_accel", (0.0, 0.0, 0.0))
+            return (float(acc[0]), float(acc[1]), float(acc[2]))
         except Exception:
             return (0.0, 0.0, 0.0)
 
@@ -68,9 +73,9 @@ class SimulatedSensors(GPSInterface, IMUInterface, BarometerInterface, BatteryIn
 
 class SimulatedNavigation(NavigationInterface):
     def __init__(self, navigation: Optional[NavigationSystem] = None):
-        self._nav = navigation if navigation is not None else NavigationSystem([])
+        self._nav = navigation if navigation is not None else NavigationSystem(Mission([]))
 
-    def active_waypoint(self):
+    def active_waypoint(self) -> Optional[Waypoint]:
         return self._nav.active_waypoint
 
     def update_position(self, lat: float, lon: float, alt: float) -> str:

@@ -73,6 +73,7 @@ class AutopilotTests(unittest.TestCase):
 
         # measure error to new target before changing it
         pre_change_error = abs(drone.altitude - 15.0)
+        assert controller.autopilot is not None
         controller.autopilot.set_target(15.0)
 
         for _ in range(100):

@@ -123,12 +123,14 @@ class SystemIntegrationTest(unittest.TestCase):
         self.assertEqual(len(mission.waypoints), 3)
         wp = mission.active_waypoint
         self.assertIsNotNone(wp)
+        assert wp is not None
         self.assertEqual(wp.name, "WP1")
         
         # ========== 4. NAVIGATION SYSTEM ==========
         nav = NavigationSystem(mission)
         fc.navigation_system = nav
         self.assertIsNotNone(nav.active_waypoint)
+        assert nav.active_waypoint is not None
         self.assertEqual(nav.active_waypoint.altitude, 15.0)
         
         # ========== 5. GUIDANCE SYSTEM ==========
@@ -182,6 +184,7 @@ class SystemIntegrationTest(unittest.TestCase):
         obstacle_detection_triggered = False
         avoidance_triggered = False
         estimator_updated = False
+        est_state = None
         landing_initiated = False
         takeoff_completed = False
         
@@ -234,8 +237,9 @@ class SystemIntegrationTest(unittest.TestCase):
                     if collision_pred.will_collide:
                         obstacle_detection_triggered = True
                         if not avoidance_triggered:
+                            obs_coords = (collision_pred.obstacle.x, collision_pred.obstacle.y) if collision_pred.obstacle is not None else None
                             recorder.record_event(sim_time, "OBSTACLE_DETECTED", {
-                                "obstacle": (collision_pred.obstacle.x, collision_pred.obstacle.y),
+                                "obstacle": obs_coords,
                                 "time_to_collision": collision_pred.time_to_collision,
                             })
                 
@@ -385,6 +389,7 @@ class SystemIntegrationTest(unittest.TestCase):
         # ========== ASSERTIONS: ESTIMATOR STATE ==========
         self.assertTrue(estimator_updated,
                        "Estimator should have been updated")
+        assert est_state is not None
         self.assertGreater(est_state.confidence, 0.0,
                           "Estimator confidence should be positive")
         

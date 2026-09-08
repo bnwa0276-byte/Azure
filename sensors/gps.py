@@ -47,7 +47,7 @@ class GPSSensor(Sensor):
         nx = ny = nz = 0.0
         if environment is not None and hasattr(environment, "get_gps_noise"):
             try:
-                nx, ny, nz = environment.get_gps_noise()
+                nx, ny, nz = getattr(environment, "get_gps_noise")()
             except Exception:
                 nx = ny = nz = 0.0
 

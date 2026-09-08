@@ -6,7 +6,7 @@ from typing import Tuple, List, Optional
 @dataclass
 class EnvironmentConfig:
     steady_wind: Tuple[float, float] = (0.0, 0.0)
-    gusts: List[tuple] = None
+    gusts: Optional[List[tuple]] = None
     turbulence_strength: float = 0.0
     enabled: bool = True
     drag_coef: float = 0.5

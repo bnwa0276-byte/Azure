@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 import shutil
 import sys
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +15,7 @@ WORLDS_DIR = GAZEBO_DIR / "worlds"
 MODELS_DIR = GAZEBO_DIR / "models"
 
 
-def detect_gazebo_installation() -> Dict[str, Optional[str]]:
+def detect_gazebo_installation() -> Dict[str, Any]:
     """Inspect environment and return detected Gazebo command and binary path."""
     binaries = ["gz", "ign", "gazebo", "gzserver"]
     for bin_name in binaries:

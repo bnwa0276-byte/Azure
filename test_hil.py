@@ -3,16 +3,18 @@ import unittest
 from hal.transports import MockTransport
 from hal.scheduler import Scheduler
 from hal.hil import HILBridge
+from hal.simulated import SimulatedVehicle
 from drone import Drone
 from flight_recorder.recorder import FlightRecorder
 
 
-class MockVehicle(Drone):
+class MockVehicle(SimulatedVehicle):
     def __init__(self):
         super().__init__()
         self.velocity_commands = []
 
     def command_velocity(self, vx: float, vy: float) -> None:
+        super().command_velocity(vx, vy)
         self.velocity_commands.append((vx, vy))
 
 

@@ -147,7 +147,8 @@ def deserialize_packet(data: bytes | str) -> GazeboPosePacket:
     pos = tuple(float(p) for p in d["position"])
     vel = tuple(float(v) for v in d["velocity"])
     orient = tuple(float(o) for o in d["orientation"])
-    acc = tuple(float(a) for a in d["acceleration"]) if d.get("acceleration") is not None else None
+    raw_acc = d.get("acceleration")
+    acc = (float(raw_acc[0]), float(raw_acc[1]), float(raw_acc[2])) if raw_acc is not None else None
     return GazeboPosePacket(
         sim_time=float(d["sim_time"]),
         position=(pos[0], pos[1], pos[2]),

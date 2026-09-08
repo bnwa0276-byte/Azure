@@ -38,7 +38,7 @@ class MatplotlibVisualizer:
     path_history: List[Tuple[float, float]] = field(default_factory=list, init=False)
 
     def __post_init__(self):
-        if not _HAS_MATPLOTLIB:
+        if not _HAS_MATPLOTLIB or plt is None:
             # fallback: simple headless visualizer state, no drawing
             self.fig = None
             self.ax = None
@@ -58,13 +58,21 @@ class MatplotlibVisualizer:
         return {
             'sim_time': f"{telemetry.get('sim_time', 0.0):.2f}s",
             'mode': str(telemetry.get('mode', 'UNKNOWN')),
-            'altitude': f"{telemetry.get('altitude', 0.0):.2f} m",
-            'vz': f"{telemetry.get('vz', 0.0):.2f} m/s",
+            'altitude': f"{telemetry.get('altitude', 0.0):.1f}m",
+            'vz': f"{telemetry.get('vz', 0.0):.2f}m/s",
             'battery': f"{telemetry.get('battery', 0.0):.1f}%",
             'target_altitude': f"{telemetry.get('target_altitude', None)}",
         }
 
-    def update(self, *, telemetry: Dict[str, Any], position: Tuple[float, float, float], waypoints: Sequence[Any], path: Sequence[Tuple[float, float, float]]) -> None:
+    def update(
+        self,
+        *,
+        telemetry: Dict[str, Any],
+        position: Tuple[float, float, float],
+        waypoints: Sequence[Any],
+        path: Sequence[Tuple[float, float, float]],
+    ) -> None:
+        """Update visualization display; does not mutate simulation state."""
         # read-only: do not modify telemetry/position
         px, py = self._map_coord(position)
 
@@ -76,8 +84,10 @@ class MatplotlibVisualizer:
             # full path snapshot provided
             self.path_history = [self._map_coord(p) for p in path]
 
-        # redraw (if matplotlib available)
-        if _HAS_MATPLOTLIB:
+        if not _HAS_MATPLOTLIB or self.ax is None:
+            return
+
+        try:
             self.ax.clear()
             self.ax.set_aspect('equal', 'box')
             self.ax.set_xlabel('X (m)')
@@ -86,9 +96,12 @@ class MatplotlibVisualizer:
             # draw path
             if self.path_history:
                 xs, ys = zip(*self.path_history)
-                self.ax.plot(xs, ys, linestyle='-', color='blue', linewidth=1)
+                self.ax.plot(xs, ys, color='blue', alpha=0.6, label='Trajectory')
 
-            # draw waypoints
+            # draw current position
+            self.ax.scatter([px], [py], color='blue', s=50, label='Drone')
+
+            # draw waypoints if provided
             if waypoints:
                 wx = []
                 wy = []
@@ -102,11 +115,11 @@ class MatplotlibVisualizer:
                             if hasattr(w, "latitude") and hasattr(w, "longitude"):
                                 # convert degrees to meters using same simplification
                                 meters_per_degree = 111_000.0
-                                wx.append((float(w.longitude)) * meters_per_degree)
-                                wy.append((float(w.latitude)) * meters_per_degree)
-                            else:
-                                wx.append(float(w.x))
-                                wy.append(float(w.y))
+                                wx.append(float(getattr(w, "longitude")) * meters_per_degree)
+                                wy.append(float(getattr(w, "latitude")) * meters_per_degree)
+                            elif hasattr(w, "x") and hasattr(w, "y"):
+                                wx.append(float(getattr(w, "x")))
+                                wy.append(float(getattr(w, "y")))
                         except Exception:
                             continue
                 if wx:
@@ -140,7 +153,7 @@ class MatplotlibVisualizer:
             self.ax.text(0.02, 0.98, txt, transform=self.ax.transAxes, va='top', fontsize=8, bbox=dict(facecolor='white', alpha=0.7))
 
             # avoid blocking; just draw to buffer
-            self.fig.canvas.draw()
-        else:
-            # headless fallback: nothing to draw, but methods must behave
-            return
+            if self.fig is not None and hasattr(self.fig, "canvas"):
+                self.fig.canvas.draw()
+        except Exception:
+            pass

@@ -9,6 +9,7 @@ from math import cos, radians, sqrt
 from typing import Optional, Iterable
 
 from navigation import NavigationSystem
+from obstacles.representation import Obstacle
 from obstacles.detector import ObstacleDetector, CollisionPrediction
 from obstacles.planner import AvoidancePlanner, AvoidancePlan
 
@@ -39,7 +40,7 @@ class GuidanceSystem:
         self.obstacle_detector: ObstacleDetector | None = None
         self.avoidance_planner: AvoidancePlanner | None = None
 
-    def set_obstacles(self, obstacles: Iterable[object]) -> None:
+    def set_obstacles(self, obstacles: Iterable[Obstacle]) -> None:
         try:
             self.obstacle_detector = ObstacleDetector(obstacles)
             self.avoidance_planner = AvoidancePlanner()

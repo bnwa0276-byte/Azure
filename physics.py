@@ -106,7 +106,7 @@ class PhysicsEngine:
 
         # External non-aerodynamic acceleration (e.g. vertical turbulence)
         if environment is not None and hasattr(environment, "get_external_acceleration"):
-            ex_ax, ex_ay, ex_az = environment.get_external_acceleration(self.position, self.velocity, sim_time)
+            ex_ax, ex_ay, ex_az = getattr(environment, "get_external_acceleration")(self.position, self.velocity, sim_time)
         else:
             ex_ax = ex_ay = ex_az = 0.0
 
@@ -115,7 +115,7 @@ class PhysicsEngine:
             wx = float(wind_velocity[0])
             wy = float(wind_velocity[1])
         elif environment is not None and hasattr(environment, "get_wind_velocity"):
-            w = environment.get_wind_velocity(self.position, self.velocity, sim_time)
+            w = getattr(environment, "get_wind_velocity")(self.position, self.velocity, sim_time)
             wx = float(w[0])
             wy = float(w[1])
         else:

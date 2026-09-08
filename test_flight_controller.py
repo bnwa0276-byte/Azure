@@ -209,6 +209,8 @@ class FlightControllerTests(unittest.TestCase):
 
         self.assertIsNotNone(hover_entry_altitude)
         self.assertIsNotNone(hover_entry_vz)
+        assert hover_entry_altitude is not None
+        assert hover_entry_vz is not None
         self.assertAlmostEqual(hover_entry_altitude, 15.0, delta=2.0,
                                msg="HOVER should be entered near the commanded altitude")
         self.assertLess(abs(hover_entry_vz), 0.5,

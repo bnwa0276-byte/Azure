@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Any
 
 
 class VehicleInterface(ABC):
@@ -65,7 +65,7 @@ class BatteryInterface(ABC):
 
 class NavigationInterface(ABC):
     @abstractmethod
-    def active_waypoint(self):
+    def active_waypoint(self) -> Any:
         ...
 
     @abstractmethod

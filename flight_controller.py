@@ -263,6 +263,6 @@ class FlightController:
                         self.disable_altitude_hold()
                     return
 
-        # Maintain altitude hold during HOVER mode (allows smooth transition from TAKEOFF)
-        if self.drone.mode == FlightMode.HOVER and self.altitude_hold_enabled:
+        # Maintain altitude hold during airborne modes when enabled
+        if self.drone.mode in {FlightMode.HOVER, FlightMode.MISSION, FlightMode.RETURN_HOME} and self.altitude_hold_enabled:
             self.update_altitude_hold(dt)

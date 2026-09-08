@@ -18,7 +18,7 @@ class TakeoffLandingTests(unittest.TestCase):
 
         original_set_alt = drone.physics.set_altitude
 
-        def forbidden_set_alt(a):
+        def forbidden_set_alt(altitude: float) -> None:
             called["set_altitude"] = True
             raise AssertionError("Operational code must not call set_altitude during takeoff")
 
@@ -61,7 +61,7 @@ class TakeoffLandingTests(unittest.TestCase):
         called = {"set_altitude": False}
         original_set_alt = drone.physics.set_altitude
 
-        def forbidden_set_alt(a):
+        def forbidden_set_alt(altitude: float) -> None:
             called["set_altitude"] = True
             raise AssertionError("Operational code must not call set_altitude during landing")
 

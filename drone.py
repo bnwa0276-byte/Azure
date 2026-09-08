@@ -5,7 +5,10 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from flight_controller import FlightController
 
 from sensors import (
     BatterySensor,
@@ -360,7 +363,7 @@ class Drone:
         self.health_monitor.update_motor_status(motor_status)
         self._evaluate_health()
 
-    def takeoff(self, target_altitude: float = 5.0, dt: float = 0.1, tolerance: float = 0.2, touch_vz: float = 0.5, max_steps: int = 200, Kp: float = 1.0, flight_controller: "FlightController" | None = None) -> None:
+    def takeoff(self, target_altitude: float = 5.0, dt: float = 0.1, tolerance: float = 0.2, touch_vz: float = 0.5, max_steps: int = 200, Kp: float = 1.0, flight_controller: FlightController | None = None) -> None:
         """Request a staged, physics-driven takeoff.
 
         The takeoff handoff to HOVER requires both altitude and vertical
@@ -380,7 +383,7 @@ class Drone:
             "internal": {},
         }
 
-    def land(self, dt: float = 0.1, tolerance: float = 0.1, touch_vz: float = 0.2, max_steps: int = 200, flight_controller: "FlightController" | None = None, Kp: float = 1.0) -> None:
+    def land(self, dt: float = 0.1, tolerance: float = 0.1, touch_vz: float = 0.2, max_steps: int = 200, flight_controller: FlightController | None = None, Kp: float = 1.0) -> None:
         """Request a staged, physics-driven landing.
 
         Records the request and changes the mode to `LANDING`. The

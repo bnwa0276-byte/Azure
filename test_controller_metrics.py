@@ -33,6 +33,8 @@ class ControllerMetricsTests(unittest.TestCase):
         m.sample(0.7, 10.1, 10.0)
 
         rt = m.recovery_time_after(0.4, tolerance=0.2)
+        self.assertIsNotNone(rt)
+        assert rt is not None
         self.assertAlmostEqual(rt, 0.3, places=2)
 
 
